@@ -1,0 +1,49 @@
+name: Import Codex skills
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .bootstrap/trigger
+
+permissions:
+  contents: write
+
+jobs:
+  import-skills:
+    if: github.event.head_commit.message == 'Trigger skill import'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild and verify archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/part* | base64 --decode > skill.zip
+          echo 'b8f482302ca86b3cad3ee0f665c0b622cbc4ee228b1a8b585bd28fb5400b483a  skill.zip' | sha256sum --check --strict
+
+      - name: Extract and validate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -oq skill.zip
+          test "$(find . -type f -not -path './.git/*' -not -path './.bootstrap/*' -not -path './.github/workflows/unpack-skills.yml' -not -name 'skill.zip' | wc -l)" -eq 51
+          test "$(find . -name SKILL.md -type f | wc -l)" -eq 26
+
+      - name: Commit imported skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .bootstrap skill.zip .github/workflows/unpack-skills.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add Codex skill collection'
+          git push origin main
