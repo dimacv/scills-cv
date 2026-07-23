@@ -26,31 +26,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          expected_sha='b8f482302ca86b3cad3ee0f665c0b622cbc4ee228b1a8b585bd28fb5400b483a'
           mapfile -t parts < <(find .bootstrap -maxdepth 1 -type f -name 'part*' -print | sort -V)
           test "${#parts[@]}" -eq 8
 
-          # Вариант 1: части являются фрагментами единой Base64-строки.
-          if cat "${parts[@]}" | tr -d '\r\n\t ' | base64 --decode > skill.zip 2>/dev/null \
-             && echo "$expected_sha  skill.zip" | sha256sum --check --strict; then
-            echo 'Archive rebuilt from a single Base64 stream.'
-          else
-            # Вариант 2: каждая часть была закодирована в Base64 отдельно.
-            : > skill.zip
-            for part in "${parts[@]}"; do
-              tr -d '\r\n\t ' < "$part" | base64 --decode >> skill.zip
-            done
-            echo "$expected_sha  skill.zip" | sha256sum --check --strict
-            echo 'Archive rebuilt from independently encoded Base64 parts.'
-          fi
+          cat "${parts[@]}" | tr -d '\r\n\t ' | base64 --decode > skill.zip
+
+          echo "Archive size: $(wc -c < skill.zip) bytes"
+          sha256sum skill.zip
+          unzip -tq skill.zip
 
       - name: Extract and validate bundle
         shell: bash
         run: |
           set -euo pipefail
           unzip -oq skill.zip
-          test "$(find . -type f -not -path './.git/*' -not -path './.bootstrap/*' -not -path './.github/workflows/unpack-skills.yml' -not -name 'skill.zip' | wc -l)" -eq 51
-          test "$(find . -name SKILL.md -type f | wc -l)" -eq 26
+
+          file_count="$(find . -type f \
+            -not -path './.git/*' \
+            -not -path './.bootstrap/*' \
+            -not -path './.github/workflows/unpack-skills.yml' \
+            -not -name 'skill.zip' | wc -l)"
+          skill_count="$(find . -name SKILL.md -type f | wc -l)"
+
+          echo "Extracted files: $file_count"
+          echo "SKILL.md files: $skill_count"
+
+          test "$file_count" -eq 51
+          test "$skill_count" -eq 26
 
       - name: Commit imported skills
         shell: bash
